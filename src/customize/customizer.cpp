@@ -27,6 +27,9 @@
 #include <map>
 #include <optional>
 
+#include "storage/serialization.hpp"
+#include "util/serialization.hpp"
+
 namespace osrm::customizer
 {
 
@@ -147,6 +150,75 @@ void maskNodeWeightFlags(std::vector<EdgeWeight> &node_weights)
         node_weights.begin(), node_weights.end(), [](auto &w) { w &= EdgeWeight{0x7fffffff}; });
 }
 
+std::filesystem::path metricSpillPath(const CustomizationConfig &config, const std::string &name)
+{
+    return {config.GetOutputPath(".osrm.mldgr").string() + ".tmp_metric_" + name};
+}
+
+void spillMetric(const CustomizationConfig &config,
+                 const std::string &name,
+                 extractor::SegmentDataContainer &segment_data,
+                 std::vector<EdgeWeight> &node_weights,
+                 std::vector<EdgeDuration> &node_durations,
+                 std::vector<CellMetric> &cells)
+{
+    storage::tar::FileWriter writer{metricSpillPath(config, name),
+                                    storage::tar::FileWriter::GenerateFingerprint};
+    auto [fwd_weights, rev_weights, fwd_durations, rev_durations] =
+        segment_data.TakeWeightsAndDurations();
+    util::serialization::write(writer, "/spill/forward_weights", fwd_weights);
+    util::serialization::write(writer, "/spill/reverse_weights", rev_weights);
+    util::serialization::write(writer, "/spill/forward_durations", fwd_durations);
+    util::serialization::write(writer, "/spill/reverse_durations", rev_durations);
+    storage::serialization::write(writer, "/spill/node_weights", node_weights);
+    storage::serialization::write(writer, "/spill/node_durations", node_durations);
+    writer.WriteElementCount64("/spill/cells", cells.size());
+    for (std::size_t i = 0; i < cells.size(); ++i)
+    {
+        serialization::write(writer, "/spill/cells/" + std::to_string(i), cells[i]);
+    }
+}
+
+void restoreMetricSegments(const CustomizationConfig &config,
+                           const std::string &name,
+                           std::map<std::string, extractor::MetricSegmentWeights> &out)
+{
+    storage::tar::FileReader reader{metricSpillPath(config, name),
+                                    storage::tar::FileReader::VerifyFingerprint};
+    extractor::MetricSegmentWeights segments;
+    util::serialization::read(reader, "/spill/forward_weights", segments.forward_weights);
+    util::serialization::read(reader, "/spill/reverse_weights", segments.reverse_weights);
+    util::serialization::read(reader, "/spill/forward_durations", segments.forward_durations);
+    util::serialization::read(reader, "/spill/reverse_durations", segments.reverse_durations);
+    out.emplace(name, std::move(segments));
+}
+
+void restoreMetricNodes(const CustomizationConfig &config,
+                        const std::string &name,
+                        std::map<std::string, files::MetricNodeWeights> &out)
+{
+    storage::tar::FileReader reader{metricSpillPath(config, name),
+                                    storage::tar::FileReader::VerifyFingerprint};
+    files::MetricNodeWeights nodes;
+    storage::serialization::read(reader, "/spill/node_weights", nodes.node_weights);
+    storage::serialization::read(reader, "/spill/node_durations", nodes.node_durations);
+    out.emplace(name, std::move(nodes));
+}
+
+std::vector<CellMetric> restoreMetricCells(const CustomizationConfig &config,
+                                           const std::string &name)
+{
+    storage::tar::FileReader reader{metricSpillPath(config, name),
+                                    storage::tar::FileReader::VerifyFingerprint};
+    auto count = reader.ReadElementCount64("/spill/cells");
+    std::vector<CellMetric> cells(count);
+    for (std::size_t i = 0; i < cells.size(); ++i)
+    {
+        serialization::read(reader, "/spill/cells/" + std::to_string(i), cells[i]);
+    }
+    return cells;
+}
+
 int RunMultiMetricCustomization(const CustomizationConfig &config,
                                 const partitioner::MultiLevelPartition &mlp,
                                 const partitioner::CellStorage &storage,
@@ -154,10 +226,6 @@ int RunMultiMetricCustomization(const CustomizationConfig &config,
                                 extractor::ProfileProperties &properties)
 {
     BOOST_ASSERT(!config.metrics.empty());
-
-    std::unordered_map<std::string, std::vector<CellMetric>> metric_exclude_classes;
-    std::map<std::string, files::MetricNodeWeights> extra_node_metrics;
-    std::map<std::string, extractor::MetricSegmentWeights> extra_segment_metrics;
 
     std::uint32_t connectivity_checksum = 0;
     std::vector<std::vector<bool>> filter;
@@ -203,22 +271,19 @@ int RunMultiMetricCustomization(const CustomizationConfig &config,
         {
             printUnreachableStatistics(mlp, storage, metric);
         }
-        metric_exclude_classes[spec.name] = std::move(cells);
 
         if (is_default)
         {
-            TIMER_START(writing_mld_data);
-            files::writeCellMetrics(config.GetOutputPath(".osrm.cell_metrics"),
-                                    metric_exclude_classes);
-            TIMER_STOP(writing_mld_data);
-            util::Log() << "MLD customization writing took " << TIMER_SEC(writing_mld_data)
-                        << " seconds";
-
             TIMER_START(writing_graph);
             MultiLevelEdgeBasedGraph shaved_graph{std::move(graph),
                                                   std::move(node_weights),
                                                   std::move(node_durations),
                                                   std::move(node_distances)};
+            std::map<std::string, files::MetricNodeWeights> extra_node_metrics;
+            for (std::size_t extra = 1; extra < config.metrics.size(); ++extra)
+            {
+                restoreMetricNodes(config, config.metrics[extra].name, extra_node_metrics);
+            }
             customizer::files::writeGraph(config.GetOutputPath(".osrm.mldgr"),
                                           shaved_graph,
                                           connectivity_checksum,
@@ -227,11 +292,37 @@ int RunMultiMetricCustomization(const CustomizationConfig &config,
             util::Log() << "Graph writing took " << TIMER_SEC(writing_graph) << " seconds";
 
             TIMER_START(writing_segments);
-            extractor::files::writeSegmentData(
-                config.updater_config.GetPath(".osrm.geometry"), segment_data,
-                extra_segment_metrics);
+            {
+                std::map<std::string, extractor::MetricSegmentWeights> extra_segment_metrics;
+                for (std::size_t extra = 1; extra < config.metrics.size(); ++extra)
+                {
+                    restoreMetricSegments(
+                        config, config.metrics[extra].name, extra_segment_metrics);
+                }
+                extractor::files::writeSegmentData(
+                    config.updater_config.GetPath(".osrm.geometry"),
+                    segment_data,
+                    extra_segment_metrics);
+            }
             TIMER_STOP(writing_segments);
             util::Log() << "Segment data writing took " << TIMER_SEC(writing_segments)
+                        << " seconds";
+
+            TIMER_START(writing_mld_data);
+            {
+                std::unordered_map<std::string, std::vector<CellMetric>> metric_exclude_classes;
+                metric_exclude_classes.emplace(spec.name, std::move(cells));
+                for (std::size_t extra = 1; extra < config.metrics.size(); ++extra)
+                {
+                    metric_exclude_classes.emplace(
+                        config.metrics[extra].name,
+                        restoreMetricCells(config, config.metrics[extra].name));
+                }
+                files::writeCellMetrics(config.GetOutputPath(".osrm.cell_metrics"),
+                                        metric_exclude_classes);
+            }
+            TIMER_STOP(writing_mld_data);
+            util::Log() << "MLD customization writing took " << TIMER_SEC(writing_mld_data)
                         << " seconds";
 
             updater::UpdaterConfig updater_config = config.updater_config;
@@ -242,20 +333,15 @@ int RunMultiMetricCustomization(const CustomizationConfig &config,
             extractor::files::writeProfileProperties(config.GetPath(".osrm.properties"),
                                                      properties);
             util::Log() << "Default metric is '" << spec.name << "'";
+
+            for (std::size_t extra = 1; extra < config.metrics.size(); ++extra)
+            {
+                std::filesystem::remove(metricSpillPath(config, config.metrics[extra].name));
+            }
         }
         else
         {
-            auto [fwd_weights, rev_weights, fwd_durations, rev_durations] =
-                segment_data.TakeWeightsAndDurations();
-            extra_segment_metrics.emplace(spec.name,
-                                          extractor::MetricSegmentWeights{
-                                              std::move(fwd_weights),
-                                              std::move(rev_weights),
-                                              std::move(fwd_durations),
-                                              std::move(rev_durations)});
-            extra_node_metrics.emplace(
-                spec.name,
-                files::MetricNodeWeights{std::move(node_weights), std::move(node_durations)});
+            spillMetric(config, spec.name, segment_data, node_weights, node_durations, cells);
         }
     }
 
