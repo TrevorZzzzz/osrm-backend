@@ -529,6 +529,8 @@ updateConditionalTurns(std::vector<TurnPenalty> &turn_weight_penalties,
 }
 } // namespace
 
+void Updater::SaveDatasourcesNames() const { saveDatasourcesNames(config); }
+
 EdgeID
 Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &edge_based_edge_list,
                                         std::vector<EdgeWeight> &node_weights,
@@ -543,7 +545,8 @@ EdgeID
 Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &edge_based_edge_list,
                                         std::vector<EdgeWeight> &node_weights,
                                         std::vector<EdgeDuration> &node_durations,
-                                        std::uint32_t &connectivity_checksum) const
+                                        std::uint32_t &connectivity_checksum,
+                                        extractor::SegmentDataContainer *output_segment_data) const
 {
     TIMER_START(load_edges);
 
@@ -567,7 +570,15 @@ Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &e
 
     if (!update_edge_weights && !update_turn_penalties && !update_conditional_turns)
     {
-        saveDatasourcesNames(config);
+        if (output_segment_data != nullptr)
+        {
+            extractor::files::readSegmentData(config.GetPath(".osrm.geometry"),
+                                              *output_segment_data);
+        }
+        else
+        {
+            saveDatasourcesNames(config);
+        }
         return number_of_edge_based_nodes;
     }
 
@@ -624,7 +635,10 @@ Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &e
                                              coordinates,
                                              osm_node_ids);
         // Now save out the updated compressed geometries
-        extractor::files::writeSegmentData(config.GetPath(".osrm.geometry"), segment_data);
+        if (output_segment_data == nullptr)
+        {
+            extractor::files::writeSegmentData(config.GetPath(".osrm.geometry"), segment_data);
+        }
         TIMER_STOP(segment);
         util::Log() << "Updating segment data took " << TIMER_MSEC(segment) << "ms.";
     }
@@ -852,14 +866,21 @@ Updater::LoadAndUpdateEdgeExpandedGraph(std::vector<extractor::EdgeBasedEdge> &e
     }
 
 #if !defined(NDEBUG)
-    if (config.turn_penalty_lookup_paths.empty())
+    if (config.turn_penalty_lookup_paths.empty() && output_segment_data == nullptr)
     { // don't check weights consistency with turn updates that can break assertion
         // condition with turn weight penalties negative updates
         checkWeightsConsistency(config, edge_based_edge_list);
     }
 #endif
 
-    saveDatasourcesNames(config);
+    if (output_segment_data != nullptr)
+    {
+        *output_segment_data = std::move(segment_data);
+    }
+    else
+    {
+        saveDatasourcesNames(config);
+    }
 
     TIMER_STOP(load_edges);
     util::Log() << "Done reading edges in " << TIMER_MSEC(load_edges) << "ms.";

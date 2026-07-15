@@ -69,6 +69,14 @@ template <storage::Ownership Ownership> class SegmentDataContainerImpl
     {
     }
 
+    auto TakeWeightsAndDurations()
+    {
+        return std::make_tuple(std::move(fwd_weights),
+                               std::move(rev_weights),
+                               std::move(fwd_durations),
+                               std::move(rev_durations));
+    }
+
     auto GetForwardGeometry(const DirectionalGeometryID id)
     {
         auto ptr = nodes.data() + index[id];
@@ -211,6 +219,14 @@ template <storage::Ownership Ownership> class SegmentDataContainerImpl
 
 using SegmentDataView = detail::SegmentDataContainerImpl<storage::Ownership::View>;
 using SegmentDataContainer = detail::SegmentDataContainerImpl<storage::Ownership::Container>;
+
+struct MetricSegmentWeights
+{
+    SegmentDataContainer::SegmentWeightVector forward_weights;
+    SegmentDataContainer::SegmentWeightVector reverse_weights;
+    SegmentDataContainer::SegmentDurationVector forward_durations;
+    SegmentDataContainer::SegmentDurationVector reverse_durations;
+};
 } // namespace osrm::extractor
 
 #endif

@@ -252,10 +252,17 @@ inline const auto exclude_rule =
     (exclude_item %
      ',')[([](auto &ctx) { x3::get<params_tag>(ctx).get().exclude = x3::_attr(ctx); })];
 
+inline const auto metric_item = x3::rule<struct metric_item_tag, std::string>{"metric_item"} =
+    +x3::char_("a-zA-Z0-9_-");
+
+inline const auto metric_rule =
+    x3::lit("metric=") >
+    metric_item[([](auto &ctx) { x3::get<params_tag>(ctx).get().metric = x3::_attr(ctx); })];
+
 // Combined base options
 inline const auto base_options = x3::rule<struct base_options_tag>{"base_options"} =
     radiuses_rule | hints_rule | bearings_rule | generate_hints_rule | skip_waypoints_rule |
-    approach_rule | exclude_rule | snapping_rule;
+    approach_rule | exclude_rule | metric_rule | snapping_rule;
 
 } // namespace base_grammar
 } // namespace osrm::server::api

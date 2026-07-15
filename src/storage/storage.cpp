@@ -512,6 +512,40 @@ void Storage::PopulateUpdatableData(const SharedDataIndex &index)
         extractor::files::readSegmentData(config.GetPath(".osrm.geometry"), segment_data);
     }
 
+    // load additional named metric weight/duration blocks of the compressed geometry
+    {
+        const std::string metrics_path = "/common/segment_data/metrics/";
+        std::vector<std::string> metric_prefixes;
+        index.List(metrics_path, std::back_inserter(metric_prefixes));
+        const auto num_entries = index.GetBlockEntries("/common/segment_data/nodes");
+        for (const auto &metric_prefix : metric_prefixes)
+        {
+            const auto metric_name = metric_prefix.substr(metrics_path.size());
+            extractor::SegmentDataView::SegmentWeightVector fwd_weights(
+                make_vector_view<extractor::SegmentDataView::SegmentWeightVector::block_type>(
+                    index, metric_prefix + "/forward_weights/packed"),
+                num_entries);
+            extractor::SegmentDataView::SegmentWeightVector rev_weights(
+                make_vector_view<extractor::SegmentDataView::SegmentWeightVector::block_type>(
+                    index, metric_prefix + "/reverse_weights/packed"),
+                num_entries);
+            extractor::SegmentDataView::SegmentDurationVector fwd_durations(
+                make_vector_view<extractor::SegmentDataView::SegmentDurationVector::block_type>(
+                    index, metric_prefix + "/forward_durations/packed"),
+                num_entries);
+            extractor::SegmentDataView::SegmentDurationVector rev_durations(
+                make_vector_view<extractor::SegmentDataView::SegmentDurationVector::block_type>(
+                    index, metric_prefix + "/reverse_durations/packed"),
+                num_entries);
+            extractor::files::readMetricSegmentData(config.GetPath(".osrm.geometry"),
+                                                    metric_name,
+                                                    fwd_weights,
+                                                    rev_weights,
+                                                    fwd_durations,
+                                                    rev_durations);
+        }
+    }
+
     {
         const auto datasources_names_ptr =
             index.GetBlockPtr<extractor::Datasources>("/common/data_sources_names");
@@ -571,10 +605,19 @@ void Storage::PopulateUpdatableData(const SharedDataIndex &index)
 
     if (std::filesystem::exists(config.GetPath(".osrm.cell_metrics")))
     {
-        auto exclude_metrics = make_cell_metric_view(index, "/mld/metrics/" + metric_name);
-        std::unordered_map<std::string, std::vector<customizer::CellMetricView>> metrics = {
-            {metric_name, std::move(exclude_metrics)},
-        };
+        const std::string metrics_path = "/mld/metrics/";
+        std::vector<std::string> metric_prefixes;
+        index.List(metrics_path, std::back_inserter(metric_prefixes));
+        std::unordered_map<std::string, std::vector<customizer::CellMetricView>> metrics;
+        for (const auto &metric_prefix : metric_prefixes)
+        {
+            const auto name = metric_prefix.substr(metrics_path.size());
+            metrics[name] = make_cell_metric_view(index, metric_prefix);
+        }
+        if (metrics.empty())
+        {
+            metrics[metric_name] = make_cell_metric_view(index, metrics_path + metric_name);
+        }
         customizer::files::readCellMetrics(config.GetPath(".osrm.cell_metrics"), metrics);
     }
 
@@ -584,6 +627,19 @@ void Storage::PopulateUpdatableData(const SharedDataIndex &index)
         std::uint32_t graph_connectivity_checksum = 0;
         customizer::files::readGraph(
             config.GetPath(".osrm.mldgr"), graph_view, graph_connectivity_checksum);
+
+        const std::string metrics_path = "/mld/multilevelgraph/metrics/";
+        std::vector<std::string> metric_prefixes;
+        index.List(metrics_path, std::back_inserter(metric_prefixes));
+        for (const auto &metric_prefix : metric_prefixes)
+        {
+            const auto name = metric_prefix.substr(metrics_path.size());
+            auto node_weights = make_vector_view<EdgeWeight>(index, metric_prefix + "/node_weights");
+            auto node_durations =
+                make_vector_view<EdgeDuration>(index, metric_prefix + "/node_durations");
+            customizer::files::readMetricNodeWeights(
+                config.GetPath(".osrm.mldgr"), name, node_weights, node_durations);
+        }
 
         if (config.IsRequiredConfiguredInput("osrm.edges"))
         {

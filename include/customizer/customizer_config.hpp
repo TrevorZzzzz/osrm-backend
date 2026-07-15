@@ -2,12 +2,20 @@
 #define OSRM_CUSTOMIZE_CUSTOMIZER_CONFIG_HPP
 
 #include <filesystem>
+#include <string>
+#include <vector>
 
 #include "storage/io_config.hpp"
 #include "updater/updater_config.hpp"
 
 namespace osrm::customizer
 {
+
+struct MetricCustomizationSpec
+{
+    std::string name;
+    std::vector<std::string> segment_speed_lookup_paths;
+};
 
 struct CustomizationConfig final : storage::IOConfig
 {
@@ -41,6 +49,8 @@ struct CustomizationConfig final : storage::IOConfig
 
     std::filesystem::path output_path;
     unsigned requested_num_threads;
+
+    std::vector<MetricCustomizationSpec> metrics;
 
     updater::UpdaterConfig updater_config;
 };

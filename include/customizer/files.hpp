@@ -7,10 +7,17 @@
 
 #include "util/integer_range.hpp"
 
+#include <map>
 #include <unordered_map>
 
 namespace osrm::customizer::files
 {
+
+struct MetricNodeWeights
+{
+    std::vector<EdgeWeight> node_weights;
+    std::vector<EdgeDuration> node_durations;
+};
 
 // reads .osrm.cell_metrics file
 template <typename CellMetricT>
@@ -101,6 +108,44 @@ inline void writeGraph(const std::filesystem::path &path,
     writer.WriteElementCount64("/mld/connectivity_checksum", 1);
     writer.WriteFrom("/mld/connectivity_checksum", connectivity_checksum);
     serialization::write(writer, "/mld/multilevelgraph", graph);
+}
+
+// writes .osrm.mldgr file with additional named metric node weights/durations
+template <typename MultiLevelGraphT>
+inline void writeGraph(const std::filesystem::path &path,
+                       const MultiLevelGraphT &graph,
+                       const std::uint32_t connectivity_checksum,
+                       const std::map<std::string, MetricNodeWeights> &metric_nodes)
+{
+    static_assert(std::is_same<customizer::MultiLevelEdgeBasedGraphView, MultiLevelGraphT>::value ||
+                      std::is_same<customizer::MultiLevelEdgeBasedGraph, MultiLevelGraphT>::value,
+                  "");
+
+    storage::tar::FileWriter writer{path, storage::tar::FileWriter::GenerateFingerprint};
+
+    writer.WriteElementCount64("/mld/connectivity_checksum", 1);
+    writer.WriteFrom("/mld/connectivity_checksum", connectivity_checksum);
+    serialization::write(writer, "/mld/multilevelgraph", graph);
+    for (const auto &metric : metric_nodes)
+    {
+        const auto prefix = "/mld/multilevelgraph/metrics/" + metric.first;
+        storage::serialization::write(writer, prefix + "/node_weights", metric.second.node_weights);
+        storage::serialization::write(
+            writer, prefix + "/node_durations", metric.second.node_durations);
+    }
+}
+
+// reads one named metric's node weights/durations from .osrm.mldgr
+template <typename WeightsT, typename DurationsT>
+inline void readMetricNodeWeights(const std::filesystem::path &path,
+                                  const std::string &metric_name,
+                                  WeightsT &node_weights,
+                                  DurationsT &node_durations)
+{
+    storage::tar::FileReader reader{path, storage::tar::FileReader::VerifyFingerprint};
+    const auto prefix = "/mld/multilevelgraph/metrics/" + metric_name;
+    storage::serialization::read(reader, prefix + "/node_weights", node_weights);
+    storage::serialization::read(reader, prefix + "/node_durations", node_durations);
 }
 } // namespace osrm::customizer::files
 

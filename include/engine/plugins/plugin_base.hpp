@@ -49,6 +49,11 @@ class BasePlugin
             return true;
         }
 
+        if (params.metric.has_value())
+        {
+            Error("InvalidValue", "Metric is not supported by this dataset.", result);
+            return false;
+        }
         if (!algorithms.HasExcludeFlags() && !params.exclude.empty())
         {
             Error("NotImplemented", "This algorithm does not support exclude flags.", result);

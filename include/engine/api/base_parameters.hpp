@@ -79,6 +79,7 @@ struct BaseParameters
     std::vector<std::optional<Bearing>> bearings;
     std::vector<std::optional<Approach>> approaches;
     std::vector<std::string> exclude;
+    std::optional<std::string> metric;
     std::optional<OutputFormatType> format = OutputFormatType::JSON;
 
     // Adds hints to response which can be included in subsequent requests, see `hints` above.

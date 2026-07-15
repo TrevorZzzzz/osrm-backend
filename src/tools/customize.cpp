@@ -8,7 +8,9 @@
 #include "util/program_options_path.hpp"
 #include <boost/program_options.hpp>
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <filesystem>
 #include <iostream>
 #include <set>
@@ -23,11 +25,55 @@ enum class return_code : unsigned
     exit
 };
 
+namespace
+{
+return_code parseMetricSpecs(const std::vector<std::string> &raw_specs,
+                             customizer::CustomizationConfig &customization_config)
+{
+    std::set<std::string> seen_names;
+    for (const auto &raw : raw_specs)
+    {
+        customizer::MetricCustomizationSpec spec;
+        std::size_t begin = 0;
+        auto next = raw.find(':');
+        spec.name = raw.substr(begin, next == std::string::npos ? next : next - begin);
+        while (next != std::string::npos)
+        {
+            begin = next + 1;
+            next = raw.find(':', begin);
+            auto csv = raw.substr(begin, next == std::string::npos ? next : next - begin);
+            if (!csv.empty())
+                spec.segment_speed_lookup_paths.push_back(csv);
+        }
+        const bool valid_name =
+            !spec.name.empty() &&
+            std::all_of(spec.name.begin(),
+                        spec.name.end(),
+                        [](unsigned char c)
+                        { return std::isalnum(c) || c == '_' || c == '-'; });
+        if (!valid_name)
+        {
+            util::Log(logERROR) << "Invalid metric name in --metric " << raw
+                                << " (allowed: [A-Za-z0-9_-]+)";
+            return return_code::fail;
+        }
+        if (!seen_names.insert(spec.name).second)
+        {
+            util::Log(logERROR) << "Duplicate metric name: " << spec.name;
+            return return_code::fail;
+        }
+        customization_config.metrics.push_back(std::move(spec));
+    }
+    return return_code::ok;
+}
+} // namespace
+
 return_code parseArguments(int argc,
                            char *argv[],
                            std::string &verbosity,
                            customizer::CustomizationConfig &customization_config)
 {
+    std::vector<std::string> metric_specs;
     // declare a group of options that will be allowed only on command line
     boost::program_options::options_description generic_options("Options");
     generic_options.add_options()("version,v", "Show version")("help,h", "Show this help message")(
@@ -76,7 +122,13 @@ return_code parseArguments(int argc,
             "time zone boundaries")(
             "output,o",
             boost::program_options::value<std::filesystem::path>(&customization_config.output_path),
-            "Output base path for generated files (default: same as input)");
+            "Output base path for generated files (default: same as input)")(
+            "metric",
+            boost::program_options::value<std::vector<std::string>>(&metric_specs)->composing(),
+            "Named metric spec '<name>[:<segment-speed-file>...]', repeatable. Creates one "
+            "dataset serving several weight metrics; the first metric is the default. "
+            "Incompatible with --segment-speed-file, --turn-penalty-file and "
+            "--parse-conditionals-from-now");
 
     // hidden options, will be allowed on command line, but will not be
     // shown to the user
@@ -142,6 +194,19 @@ return_code parseArguments(int argc,
     {
         std::cout << visible_options;
         return return_code::fail;
+    }
+
+    if (!metric_specs.empty())
+    {
+        if (!customization_config.updater_config.segment_speed_lookup_paths.empty() ||
+            !customization_config.updater_config.turn_penalty_lookup_paths.empty() ||
+            customization_config.updater_config.valid_now != 0)
+        {
+            util::Log(logERROR) << "--metric cannot be combined with --segment-speed-file, "
+                                   "--turn-penalty-file or --parse-conditionals-from-now";
+            return return_code::fail;
+        }
+        return parseMetricSpecs(metric_specs, customization_config);
     }
 
     return return_code::ok;

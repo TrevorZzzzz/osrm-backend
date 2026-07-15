@@ -17,6 +17,8 @@
 #include "util/range_table.hpp"
 #include "util/serialization.hpp"
 
+#include <map>
+
 namespace osrm::extractor::files
 {
 
@@ -208,6 +210,52 @@ void writeSegmentData(const std::filesystem::path &path, const SegmentDataT &seg
     storage::tar::FileWriter writer{path, fingerprint};
 
     serialization::write(writer, "/common/segment_data", segment_data);
+}
+
+// writes .osrm.geometry with additional named metric weight/duration blocks
+template <typename SegmentDataT>
+void writeSegmentData(const std::filesystem::path &path,
+                      const SegmentDataT &segment_data,
+                      const std::map<std::string, MetricSegmentWeights> &metric_segments)
+{
+    static_assert(std::is_same<SegmentDataContainer, SegmentDataT>::value ||
+                      std::is_same<SegmentDataView, SegmentDataT>::value,
+                  "");
+    const auto fingerprint = storage::tar::FileWriter::GenerateFingerprint;
+    storage::tar::FileWriter writer{path, fingerprint};
+
+    serialization::write(writer, "/common/segment_data", segment_data);
+    for (const auto &metric : metric_segments)
+    {
+        const auto prefix = "/common/segment_data/metrics/" + metric.first;
+        util::serialization::write(
+            writer, prefix + "/forward_weights", metric.second.forward_weights);
+        util::serialization::write(
+            writer, prefix + "/reverse_weights", metric.second.reverse_weights);
+        util::serialization::write(
+            writer, prefix + "/forward_durations", metric.second.forward_durations);
+        util::serialization::write(
+            writer, prefix + "/reverse_durations", metric.second.reverse_durations);
+    }
+}
+
+// reads one named metric's weight/duration blocks from .osrm.geometry
+template <typename WeightsT, typename DurationsT>
+void readMetricSegmentData(const std::filesystem::path &path,
+                           const std::string &metric_name,
+                           WeightsT &forward_weights,
+                           WeightsT &reverse_weights,
+                           DurationsT &forward_durations,
+                           DurationsT &reverse_durations)
+{
+    const auto fingerprint = storage::tar::FileReader::VerifyFingerprint;
+    storage::tar::FileReader reader{path, fingerprint};
+
+    const auto prefix = "/common/segment_data/metrics/" + metric_name;
+    util::serialization::read(reader, prefix + "/forward_weights", forward_weights);
+    util::serialization::read(reader, prefix + "/reverse_weights", reverse_weights);
+    util::serialization::read(reader, prefix + "/forward_durations", forward_durations);
+    util::serialization::read(reader, prefix + "/reverse_durations", reverse_durations);
 }
 
 // reads .osrm.ebg_nodes

@@ -161,6 +161,52 @@ inline auto make_segment_data_view(const SharedDataIndex &index, const std::stri
                                       rev_datasources_list};
 }
 
+inline auto make_segment_data_view(const SharedDataIndex &index,
+                                   const std::string &name,
+                                   const std::string &metric_prefix)
+{
+    auto geometry_begin_indices = make_vector_view<unsigned>(index, name + "/index");
+
+    auto node_list = make_vector_view<NodeID>(index, name + "/nodes");
+
+    auto num_entries = index.GetBlockEntries(name + "/nodes");
+
+    extractor::SegmentDataView::SegmentWeightVector fwd_weight_list(
+        make_vector_view<extractor::SegmentDataView::SegmentWeightVector::block_type>(
+            index, metric_prefix + "/forward_weights/packed"),
+        num_entries);
+
+    extractor::SegmentDataView::SegmentWeightVector rev_weight_list(
+        make_vector_view<extractor::SegmentDataView::SegmentWeightVector::block_type>(
+            index, metric_prefix + "/reverse_weights/packed"),
+        num_entries);
+
+    extractor::SegmentDataView::SegmentDurationVector fwd_duration_list(
+        make_vector_view<extractor::SegmentDataView::SegmentDurationVector::block_type>(
+            index, metric_prefix + "/forward_durations/packed"),
+        num_entries);
+
+    extractor::SegmentDataView::SegmentDurationVector rev_duration_list(
+        make_vector_view<extractor::SegmentDataView::SegmentDurationVector::block_type>(
+            index, metric_prefix + "/reverse_durations/packed"),
+        num_entries);
+
+    auto fwd_datasources_list =
+        make_vector_view<DatasourceID>(index, name + "/forward_data_sources");
+
+    auto rev_datasources_list =
+        make_vector_view<DatasourceID>(index, name + "/reverse_data_sources");
+
+    return extractor::SegmentDataView{geometry_begin_indices,
+                                      node_list,
+                                      fwd_weight_list,
+                                      rev_weight_list,
+                                      fwd_duration_list,
+                                      rev_duration_list,
+                                      fwd_datasources_list,
+                                      rev_datasources_list};
+}
+
 inline auto make_coordinates_view(const SharedDataIndex &index, const std::string &name)
 {
     return make_vector_view<util::Coordinate>(index, name);
@@ -325,6 +371,32 @@ inline auto make_multi_level_graph_view(const SharedDataIndex &index, const std:
         index, name + "/node_to_edge_offset");
     auto node_weights = make_vector_view<EdgeWeight>(index, name + "/node_weights");
     auto node_durations = make_vector_view<EdgeDuration>(index, name + "/node_durations");
+    auto node_distances = make_vector_view<EdgeDistance>(index, name + "/node_distances");
+    auto is_forward_edge = make_vector_view<bool>(index, name + "/is_forward_edge");
+    auto is_backward_edge = make_vector_view<bool>(index, name + "/is_backward_edge");
+
+    return customizer::MultiLevelEdgeBasedGraphView(node_list,
+                                                    edge_list,
+                                                    node_to_offset,
+                                                    node_weights,
+                                                    node_durations,
+                                                    node_distances,
+                                                    is_forward_edge,
+                                                    is_backward_edge);
+}
+
+inline auto make_multi_level_graph_view(const SharedDataIndex &index,
+                                        const std::string &name,
+                                        const std::string &metric_prefix)
+{
+    auto node_list = make_vector_view<customizer::MultiLevelEdgeBasedGraphView::NodeArrayEntry>(
+        index, name + "/node_array");
+    auto edge_list = make_vector_view<customizer::MultiLevelEdgeBasedGraphView::EdgeArrayEntry>(
+        index, name + "/edge_array");
+    auto node_to_offset = make_vector_view<customizer::MultiLevelEdgeBasedGraphView::EdgeOffset>(
+        index, name + "/node_to_edge_offset");
+    auto node_weights = make_vector_view<EdgeWeight>(index, metric_prefix + "/node_weights");
+    auto node_durations = make_vector_view<EdgeDuration>(index, metric_prefix + "/node_durations");
     auto node_distances = make_vector_view<EdgeDistance>(index, name + "/node_distances");
     auto is_forward_edge = make_vector_view<bool>(index, name + "/is_forward_edge");
     auto is_backward_edge = make_vector_view<bool>(index, name + "/is_backward_edge");

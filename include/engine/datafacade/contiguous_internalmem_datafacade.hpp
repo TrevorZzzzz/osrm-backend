@@ -154,6 +154,7 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
     using SharedGeospatialQuery = GeospatialQuery<SharedRTree, BaseDataFacade>;
 
     extractor::ClassData exclude_mask;
+    std::string m_metric_name;
     extractor::ProfileProperties *m_profile_properties;
     extractor::Datasources *m_datasources;
 
@@ -200,8 +201,7 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
                                     const std::string &metric_name,
                                     const std::size_t exclude_index)
     {
-        // TODO: For multi-metric support we need to have separate exclude classes per metric
-        (void)metric_name;
+        m_metric_name = metric_name;
 
         m_profile_properties =
             index.GetBlockPtr<extractor::ProfileProperties>("/common/properties");
@@ -252,7 +252,16 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
         m_turn_weight_penalties = make_turn_weight_view(index, "/common/turn_penalty");
         m_turn_duration_penalties = make_turn_duration_view(index, "/common/turn_penalty");
 
-        segment_data = make_segment_data_view(index, "/common/segment_data");
+        const auto metric_segment_prefix = "/common/segment_data/metrics/" + metric_name;
+        if (isIndexed(index, metric_segment_prefix + "/forward_weights/packed"))
+        {
+            segment_data =
+                make_segment_data_view(index, "/common/segment_data", metric_segment_prefix);
+        }
+        else
+        {
+            segment_data = make_segment_data_view(index, "/common/segment_data");
+        }
 
         m_datasources = index.GetBlockPtr<extractor::Datasources>("/common/data_sources_names");
 
@@ -504,7 +513,7 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
         return m_profile_properties->GetMaxCollapseDistance();
     }
 
-    const char *GetWeightName() const override final { return m_profile_properties->weight_name; }
+    const char *GetWeightName() const override final { return m_metric_name.c_str(); }
 
     unsigned GetWeightPrecision() const override final
     {
@@ -656,6 +665,14 @@ template <> class ContiguousInternalMemoryAlgorithmDataFacade<MLD> : public Algo
 
     QueryGraph query_graph;
 
+    static bool hasBlockPrefix(const storage::SharedDataIndex &index, const std::string &name)
+    {
+        bool result = false;
+        index.List(name,
+                   osrm::util::make_function_output_iterator([&](const auto &) { result = true; }));
+        return result;
+    }
+
     void InitializeInternalPointers(const storage::SharedDataIndex &index,
                                     const std::string &metric_name,
                                     const std::size_t exclude_index)
@@ -664,7 +681,16 @@ template <> class ContiguousInternalMemoryAlgorithmDataFacade<MLD> : public Algo
         mld_cell_metric =
             make_filtered_cell_metric_view(index, "/mld/metrics/" + metric_name, exclude_index);
         mld_cell_storage = make_cell_storage_view(index, "/mld/cellstorage");
-        query_graph = make_multi_level_graph_view(index, "/mld/multilevelgraph");
+        const auto metric_graph_prefix = "/mld/multilevelgraph/metrics/" + metric_name;
+        if (hasBlockPrefix(index, metric_graph_prefix + "/node_weights"))
+        {
+            query_graph =
+                make_multi_level_graph_view(index, "/mld/multilevelgraph", metric_graph_prefix);
+        }
+        else
+        {
+            query_graph = make_multi_level_graph_view(index, "/mld/multilevelgraph");
+        }
     }
 
     // allocator that keeps the allocation data
