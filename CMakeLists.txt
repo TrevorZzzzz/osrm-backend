@@ -321,6 +321,7 @@ find_package(Threads REQUIRED)
 include(CheckCXXSourceRuns)
 
 find_package(LibArchive REQUIRED)
+add_dependency_includes(${LibArchive_INCLUDE_DIRS})
 
 # Header-only libraries from vcpkg. Each provides a CMake CONFIG package.
 find_package(RapidJSON CONFIG REQUIRED)
@@ -411,6 +412,10 @@ add_dependency_includes(${Boost_INCLUDE_DIRS})
 add_dependency_includes(${EXPAT_INCLUDE_DIRS})
 add_dependency_includes(${BZIP2_INCLUDE_DIR})
 add_dependency_includes(${LUA_INCLUDE_DIR})
+get_filename_component(_lua_include_parent "${LUA_INCLUDE_DIR}" DIRECTORY)
+if(EXISTS "${_lua_include_parent}/lua/lua.hpp")
+  include_directories(BEFORE SYSTEM "${_lua_include_parent}")
+endif()
 
 # Use modern imported targets for TBB and Boost so the rest of the build
 # is agnostic to whether the deps came from vcpkg, a system package, or a
