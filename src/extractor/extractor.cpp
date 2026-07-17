@@ -237,8 +237,46 @@ int Extractor::run(ScriptingEnvironment &scripting_environment)
 
     util::Log() << "Writing nodes for nodes-based and edges-based graphs ...";
     auto const &coordinates = node_based_graph_factory.GetCoordinates();
-    files::writeNodes(
-        config.GetPath(".osrm.nbg_nodes"), coordinates, node_based_graph_factory.GetOsmNodes());
+    if (!config.node_elevations_path.empty())
+    {
+        constexpr char expected_magic[8] = {'O', 'S', 'R', 'M', 'E', 'L', 'E', 'V'};
+        std::ifstream table(config.node_elevations_path, std::ios::binary);
+        char magic[8] = {};
+        std::uint64_t table_count = 0;
+        table.read(magic, sizeof(magic));
+        table.read(reinterpret_cast<char *>(&table_count), sizeof(table_count));
+        if (!table || !std::equal(std::begin(magic), std::end(magic), std::begin(expected_magic)))
+        {
+            throw util::exception("Invalid node elevation table: " +
+                                  config.node_elevations_path.string());
+        }
+        std::vector<float> table_values(table_count);
+        table.read(reinterpret_cast<char *>(table_values.data()),
+                   static_cast<std::streamsize>(table_count * sizeof(float)));
+        if (!table)
+        {
+            throw util::exception("Truncated node elevation table: " +
+                                  config.node_elevations_path.string());
+        }
+        const auto &osm_node_ids = node_based_graph_factory.GetOsmNodes();
+        std::vector<float> elevations(coordinates.size(),
+                                      std::numeric_limits<float>::quiet_NaN());
+        for (std::size_t i = 0; i < elevations.size(); ++i)
+        {
+            const auto osm_id = static_cast<std::uint64_t>(osm_node_ids[i]);
+            if (osm_id < table_values.size())
+            {
+                elevations[i] = table_values[osm_id];
+            }
+        }
+        files::writeNodes(
+            config.GetPath(".osrm.nbg_nodes"), coordinates, osm_node_ids, elevations);
+    }
+    else
+    {
+        files::writeNodes(
+            config.GetPath(".osrm.nbg_nodes"), coordinates, node_based_graph_factory.GetOsmNodes());
+    }
     node_based_graph_factory.ReleaseOsmNodes();
 
     auto const &node_based_graph = node_based_graph_factory.GetGraph();

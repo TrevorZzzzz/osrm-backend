@@ -77,6 +77,7 @@ struct ExtractorConfig final : storage::IOConfig
     std::filesystem::path input_path;
     std::filesystem::path profile_path;
     std::vector<std::filesystem::path> location_dependent_data_paths;
+    std::filesystem::path node_elevations_path;
     std::filesystem::path output_path;
     std::string data_version;
 

@@ -1,3 +1,4 @@
+import struct
 import sys
 from pathlib import Path
 
@@ -78,12 +79,27 @@ def write_height_csv(path):
                 out.write(f"{b},{a},{speed:.3f},{rate:.6f}\n")
 
 
+def node_elevation(node_id):
+    return 100.0 + node_id * 10.0
+
+
+def write_elevation_table(path):
+    max_id = max(NODES)
+    with path.open("wb") as out:
+        out.write(b"OSRMELEV")
+        out.write(struct.pack("<Q", max_id + 1))
+        for node_id in range(max_id + 1):
+            value = node_elevation(node_id) if node_id in NODES else float("nan")
+            out.write(struct.pack("<f", value))
+
+
 def main():
     out_dir = Path(sys.argv[1])
     out_dir.mkdir(parents=True, exist_ok=True)
     write_pbf(out_dir / "fixture.osm.pbf")
     write_popularity_csv(out_dir / "popularity.csv")
     write_height_csv(out_dir / "height.csv")
+    write_elevation_table(out_dir / "elevations.bin")
     print(out_dir / "fixture.osm.pbf")
 
 

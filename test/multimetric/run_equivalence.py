@@ -39,10 +39,13 @@ def run(cmd, cwd=None):
         raise SystemExit(f"command failed: {' '.join(str(c) for c in cmd)}")
 
 
-def build_base(target_dir):
+def build_base(target_dir, node_elevations=None):
     target_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(OUT / "fixture.osm.pbf", target_dir / "fixture.osm.pbf")
-    run([BUILD / "osrm-extract", "fixture.osm.pbf", "-p", PROFILE], cwd=target_dir)
+    extract_cmd = [BUILD / "osrm-extract", "fixture.osm.pbf", "-p", PROFILE]
+    if node_elevations is not None:
+        extract_cmd += ["--node-elevations", node_elevations]
+    run(extract_cmd, cwd=target_dir)
     run([BUILD / "osrm-partition", "fixture.osrm"], cwd=target_dir)
 
 
@@ -82,10 +85,10 @@ def main():
         "vanilla_pop": OUT / "vanilla_pop",
         "vanilla_height": OUT / "vanilla_height",
     }
-    for path in datasets.values():
+    for name, path in datasets.items():
         if path.exists():
             shutil.rmtree(path)
-        build_base(path)
+        build_base(path, OUT / "elevations.bin" if name == "fork_multi" else None)
 
     run(
         [
@@ -178,6 +181,30 @@ def main():
                 elif determinism_baseline[metric] != response:
                     failures.append(f"alternating repeat {repeat} changed the {metric} response")
                     break
+
+        for metric in ("popularity", "height"):
+            with_elevation = query(
+                ports["fork_multi"],
+                [NODES[1], NODES[4]],
+                {**params, "metric": metric, "annotations": ANNOTATIONS + ",elevation"},
+            )
+            for leg in with_elevation["routes"][0]["legs"]:
+                node_ids = leg["annotation"]["nodes"]
+                heights = leg["annotation"]["elevation"]
+                if len(heights) != len(node_ids):
+                    failures.append(f"{metric} elevation annotation length mismatch")
+                    continue
+                expected = [100.0 + node_id * 10.0 for node_id in node_ids]
+                if any(abs(h - e) > 0.01 for h, e in zip(heights, expected)):
+                    failures.append(f"{metric} elevation annotation values wrong")
+        vanilla_elev = query(
+            ports["vanilla_pop"],
+            [NODES[1], NODES[4]],
+            {**params, "annotations": "nodes,elevation"},
+        )
+        for leg in vanilla_elev["routes"][0]["legs"]:
+            if any(h is not None for h in leg["annotation"]["elevation"]):
+                failures.append("dataset without elevations returned non-null heights")
 
         unknown = query(
             ports["fork_multi"], [NODES[1], NODES[4]], {**params, "metric": "nonexistent"}

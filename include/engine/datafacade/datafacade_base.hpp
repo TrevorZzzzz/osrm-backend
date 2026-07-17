@@ -74,6 +74,8 @@ class BaseDataFacade
 
     virtual OSMNodeID GetOSMNodeIDOfNode(const NodeID node_based_node_id) const = 0;
 
+    virtual float GetNodeElevation(const NodeID node_based_node_id) const = 0;
+
     virtual GeometryID GetGeometryIndex(const NodeID edge_based_node_id) const = 0;
 
     virtual ComponentID GetComponentID(const NodeID edge_based_node_id) const = 0;

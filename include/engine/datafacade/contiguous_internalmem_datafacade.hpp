@@ -156,6 +156,7 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
 
     extractor::ClassData exclude_mask;
     std::string m_metric_name;
+    util::vector_view<float> m_node_elevations;
     extractor::ProfileProperties *m_profile_properties;
     extractor::Datasources *m_datasources;
 
@@ -225,6 +226,11 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
 
         std::tie(m_coordinate_list, m_osmnodeid_list) =
             make_nbn_data_view(index, "/common/nbn_data");
+
+        if (isIndexed(index, "/common/nbn_data/elevations"))
+        {
+            m_node_elevations = make_vector_view<float>(index, "/common/nbn_data/elevations");
+        }
 
         m_static_rtree = make_search_tree_view(index, "/common/rtree");
         m_geospatial_query.reset(
@@ -512,6 +518,15 @@ class ContiguousInternalMemoryDataFacadeBase : public BaseDataFacade
     double GetMaxCollapseDistance() const override final
     {
         return m_profile_properties->GetMaxCollapseDistance();
+    }
+
+    float GetNodeElevation(const NodeID nbg_node_id) const override final
+    {
+        if (nbg_node_id < m_node_elevations.size())
+        {
+            return m_node_elevations[nbg_node_id];
+        }
+        return std::numeric_limits<float>::quiet_NaN();
     }
 
     const char *GetWeightName() const override final { return m_metric_name.c_str(); }

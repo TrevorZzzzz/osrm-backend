@@ -150,6 +150,24 @@ void writeNodes(const std::filesystem::path &path,
     util::serialization::write(writer, "/common/nbn_data/osm_node_ids", osm_node_ids);
 }
 
+// writes .osrm.nbg_nodes with per-node elevations
+template <typename CoordinatesT, typename PackedOSMIDsT>
+void writeNodes(const std::filesystem::path &path,
+                const CoordinatesT &coordinates,
+                const PackedOSMIDsT &osm_node_ids,
+                const std::vector<float> &elevations)
+{
+    static_assert(std::is_same<typename CoordinatesT::value_type, util::Coordinate>::value, "");
+    static_assert(std::is_same<typename PackedOSMIDsT::value_type, OSMNodeID>::value, "");
+
+    const auto fingerprint = storage::tar::FileWriter::GenerateFingerprint;
+    storage::tar::FileWriter writer{path, fingerprint};
+
+    storage::serialization::write(writer, "/common/nbn_data/coordinates", coordinates);
+    util::serialization::write(writer, "/common/nbn_data/osm_node_ids", osm_node_ids);
+    storage::serialization::write(writer, "/common/nbn_data/elevations", elevations);
+}
+
 // reads .osrm.cnbg_to_ebg
 inline void readNBGMapping(const std::filesystem::path &path, std::vector<NBGToEBG> &mapping)
 {

@@ -71,6 +71,11 @@ return_code parseArguments(int argc,
                                   &extractor_config.location_dependent_data_paths)
                                   ->composing(),
                               "GeoJSON files with location-dependent data")(
+        "node-elevations",
+        boost::program_options::value<std::filesystem::path>(
+            &extractor_config.node_elevations_path),
+        "Binary node elevation table (OSRMELEV magic, uint64 count, float32 per node id); "
+        "stores per-node elevations for the elevation route annotation")(
         "disable-location-cache",
         boost::program_options::bool_switch(&extractor_config.use_locations_cache)
             ->implicit_value(false)

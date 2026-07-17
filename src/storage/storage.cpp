@@ -464,6 +464,16 @@ void Storage::PopulateStaticData(const SharedDataIndex &index)
         auto views = make_nbn_data_view(index, "/common/nbn_data");
         extractor::files::readNodes(
             config.GetPath(".osrm.nbg_nodes"), std::get<0>(views), std::get<1>(views));
+
+        std::vector<std::string> elevation_blocks;
+        index.List("/common/nbn_data/elevations", std::back_inserter(elevation_blocks));
+        if (!elevation_blocks.empty())
+        {
+            auto elevations = make_vector_view<float>(index, "/common/nbn_data/elevations");
+            storage::tar::FileReader reader{config.GetPath(".osrm.nbg_nodes"),
+                                            storage::tar::FileReader::VerifyFingerprint};
+            storage::serialization::read(reader, "/common/nbn_data/elevations", elevations);
+        }
     }
 
     // store search tree portion of rtree

@@ -883,6 +883,24 @@ class RouteAPI : public BaseAPI
                     }
                     annotation.values.emplace("nodes", std::move(nodes));
                 }
+                if (requested_annotations & RouteParameters::AnnotationsType::Elevation)
+                {
+                    util::json::Array elevations;
+                    elevations.values.reserve(leg_geometry.node_ids.size());
+                    for (const auto node_id : leg_geometry.node_ids)
+                    {
+                        const auto elevation = facade.GetNodeElevation(node_id);
+                        if (std::isfinite(elevation))
+                        {
+                            elevations.values.push_back(static_cast<double>(elevation));
+                        }
+                        else
+                        {
+                            elevations.values.push_back(util::json::Null{});
+                        }
+                    }
+                    annotation.values.emplace("elevation", std::move(elevations));
+                }
                 // Add any supporting metadata, if needed
                 if (requested_annotations & RouteParameters::AnnotationsType::Datasources)
                 {
