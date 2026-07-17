@@ -20,6 +20,7 @@
 #include <boost/assert.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <iterator>
 #include <memory>
@@ -664,6 +665,13 @@ template <> class ContiguousInternalMemoryAlgorithmDataFacade<MLD> : public Algo
     using GraphEdge = QueryGraph::EdgeArrayEntry;
 
     QueryGraph query_graph;
+    std::uint32_t unpacking_cache_token = 0;
+
+    static std::uint32_t nextUnpackingCacheToken()
+    {
+        static std::atomic<std::uint32_t> counter{0};
+        return ++counter;
+    }
 
     static bool hasBlockPrefix(const storage::SharedDataIndex &index, const std::string &name)
     {
@@ -681,6 +689,7 @@ template <> class ContiguousInternalMemoryAlgorithmDataFacade<MLD> : public Algo
         mld_cell_metric =
             make_filtered_cell_metric_view(index, "/mld/metrics/" + metric_name, exclude_index);
         mld_cell_storage = make_cell_storage_view(index, "/mld/cellstorage");
+        unpacking_cache_token = nextUnpackingCacheToken();
         const auto metric_graph_prefix = "/mld/multilevelgraph/metrics/" + metric_name;
         if (hasBlockPrefix(index, metric_graph_prefix + "/node_weights"))
         {
@@ -714,6 +723,8 @@ template <> class ContiguousInternalMemoryAlgorithmDataFacade<MLD> : public Algo
     const partitioner::CellStorageView &GetCellStorage() const override { return mld_cell_storage; }
 
     const customizer::CellMetricView &GetCellMetric() const override { return mld_cell_metric; }
+
+    std::uint32_t GetUnpackingCacheToken() const override final { return unpacking_cache_token; }
 
     // search graph access
     unsigned GetNumberOfNodes() const override final { return query_graph.GetNumberOfNodes(); }

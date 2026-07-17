@@ -167,6 +167,18 @@ def main():
             if normalize(fork_pop) != normalize(fork_height):
                 divergent_routes += 1
 
+        determinism_baseline = {}
+        for repeat in range(30):
+            for metric in ("popularity", "height"):
+                response = normalize(
+                    query(ports["fork_multi"], [NODES[1], NODES[4]], {**params, "metric": metric})
+                )
+                if metric not in determinism_baseline:
+                    determinism_baseline[metric] = response
+                elif determinism_baseline[metric] != response:
+                    failures.append(f"alternating repeat {repeat} changed the {metric} response")
+                    break
+
         unknown = query(
             ports["fork_multi"], [NODES[1], NODES[4]], {**params, "metric": "nonexistent"}
         )

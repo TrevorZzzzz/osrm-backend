@@ -98,6 +98,8 @@ template <> class AlgorithmDataFacade<MLD>
 
     virtual const customizer::CellMetricView &GetCellMetric() const = 0;
 
+    virtual std::uint32_t GetUnpackingCacheToken() const = 0;
+
     virtual EdgeRange GetBorderEdgeRange(const LevelID level,
                                          const NodeID edge_based_node_id) const = 0;
 

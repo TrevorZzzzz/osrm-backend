@@ -119,6 +119,7 @@ struct MLDUnpackingCacheKey
     NodeID target;
     LevelID level;
     CellID cell_id;
+    std::uint32_t facade_token;
 
     bool operator==(const MLDUnpackingCacheKey &) const = default;
 };
@@ -131,6 +132,7 @@ struct MLDUnpackingCacheKeyHash
         h ^= std::hash<NodeID>{}(k.target) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<LevelID>{}(k.level) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<CellID>{}(k.cell_id) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<std::uint32_t>{}(k.facade_token) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
 };
