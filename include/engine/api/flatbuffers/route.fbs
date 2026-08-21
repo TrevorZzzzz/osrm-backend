@@ -13,6 +13,9 @@ table Annotation {
     weight: [uint];
     speed: [float];
     metadata: Metadata;
+    // Per-node elevation in metres, aligned with `nodes`; NaN where unknown.
+    // Appended last to keep flatbuffers field ids wire-compatible.
+    elevation: [float];
 }
 
 enum ManeuverType: byte {

@@ -532,6 +532,17 @@ class RouteAPI : public BaseAPI
             }
         }
         auto nodes_vector = fb_result.CreateVector(nodes);
+        flatbuffers::Offset<flatbuffers::Vector<float>> elevation;
+        if (requested_annotations & RouteParameters::AnnotationsType::Elevation)
+        {
+            std::vector<float> elevations;
+            elevations.reserve(leg_geometry.node_ids.size());
+            for (const auto node_id : leg_geometry.node_ids)
+            {
+                elevations.emplace_back(facade.GetNodeElevation(node_id));
+            }
+            elevation = fb_result.CreateVector(elevations);
+        }
         // Add any supporting metadata, if needed
         bool use_metadata = requested_annotations & RouteParameters::AnnotationsType::Datasources;
         flatbuffers::Offset<fbresult::Metadata> metadata_buffer;
@@ -557,6 +568,7 @@ class RouteAPI : public BaseAPI
         annotation.add_weight(weight);
         annotation.add_datasources(datasources);
         annotation.add_nodes(nodes_vector);
+        annotation.add_elevation(elevation);
         if (use_metadata)
         {
             annotation.add_metadata(metadata_buffer);

@@ -241,6 +241,17 @@ int Extractor::run(ScriptingEnvironment &scripting_environment)
     {
         constexpr char expected_magic[8] = {'O', 'S', 'R', 'M', 'E', 'L', 'E', 'V'};
         std::ifstream table(config.node_elevations_path, std::ios::binary);
+        std::uint64_t file_size = 0;
+        if (table)
+        {
+            table.seekg(0, std::ios::end);
+            const auto end_position = table.tellg();
+            if (end_position >= 0)
+            {
+                file_size = static_cast<std::uint64_t>(end_position);
+            }
+            table.seekg(0, std::ios::beg);
+        }
         char magic[8] = {};
         std::uint64_t table_count = 0;
         table.read(magic, sizeof(magic));
@@ -248,6 +259,14 @@ int Extractor::run(ScriptingEnvironment &scripting_environment)
         if (!table || !std::equal(std::begin(magic), std::end(magic), std::begin(expected_magic)))
         {
             throw util::exception("Invalid node elevation table: " +
+                                  config.node_elevations_path.string());
+        }
+        constexpr std::uint64_t header_size = sizeof(magic) + sizeof(table_count);
+        if (file_size < header_size ||
+            (file_size - header_size) % sizeof(float) != 0 ||
+            table_count != (file_size - header_size) / sizeof(float))
+        {
+            throw util::exception("Node elevation table count does not match its file size: " +
                                   config.node_elevations_path.string());
         }
         std::vector<float> table_values(table_count);

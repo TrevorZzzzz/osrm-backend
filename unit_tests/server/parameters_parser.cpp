@@ -411,6 +411,23 @@ BOOST_AUTO_TEST_CASE(valid_route_urls)
                       true);
     BOOST_CHECK_EQUAL(result_speed->annotations, true);
 
+    auto result_elevation =
+        parseParameters<RouteParameters>("1,2;3,4?geometries=polyline&"
+                                         "overview=simplified&annotations=elevation,nodes");
+    BOOST_CHECK(result_elevation);
+    BOOST_CHECK_EQUAL(result_elevation->annotations_type ==
+                          (RouteParameters::AnnotationsType::Elevation |
+                           RouteParameters::AnnotationsType::Nodes),
+                      true);
+    BOOST_CHECK_EQUAL(result_elevation->annotations, true);
+
+    auto result_annotations_true =
+        parseParameters<RouteParameters>("1,2;3,4?annotations=true");
+    BOOST_CHECK(result_annotations_true);
+    BOOST_CHECK_EQUAL(static_cast<bool>(result_annotations_true->annotations_type &
+                                        RouteParameters::AnnotationsType::Elevation),
+                      false);
+
     // parse multiple annotations correctly
     RouteParameters reference_16{};
     reference_16.annotations_type = RouteParameters::AnnotationsType::Duration |

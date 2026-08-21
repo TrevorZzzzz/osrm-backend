@@ -209,7 +209,7 @@ In addition to the [general options](#general-options) the following options are
 |------------|---------------------------------------------|-------------------------------------------------------------------------------|
 |alternatives|`true`, `false` (default), or Number         |Search for alternative routes. Passing a number `alternatives=n` searches for up to `n` alternative routes.\*                            |
 |steps       |`true`, `false` (default)                    |Returned route steps for each route leg                                        |
-|annotations |`true`, `false` (default), `nodes`, `distance`, `duration`, `datasources`, `weight`, `speed`  |Returns additional metadata for each coordinate along the route geometry.      |
+|annotations |`true`, `false` (default), `nodes`, `distance`, `duration`, `datasources`, `weight`, `speed`, `elevation`  |Returns additional metadata for each coordinate along the route geometry. `annotations=true` does not include `elevation`; request it explicitly.      |
 |geometries  |`polyline` (default), `polyline6`, `geojson` |Returned route geometry format (influences overview and per step)              |
 |overview    |`simplified` (default), `full`, `false`, `by_legs`      |Add overview geometry either full, simplified according to highest zoom level it could be displayed on, not at all, or split by leg.|
 |continue\_straight |`default` (default), `true`, `false`  |Forces the route to keep going straight at waypoints constraining uturns there even if it would be faster. Default value depends on the profile. |
@@ -431,7 +431,7 @@ In addition to the [general options](#general-options) the following options are
 |------------|------------------------------------------------|------------------------------------------------------------------------------------------|
 |steps       |`true`, `false` (default)                       |Returned route steps for each route                                                       |
 |geometries  |`polyline` (default), `polyline6`, `geojson`    |Returned route geometry format (influences overview and per step)                         |
-|annotations |`true`, `false` (default), `nodes`, `distance`, `duration`, `datasources`, `weight`, `speed`  |Returns additional metadata for each coordinate along the route geometry.                 |
+|annotations |`true`, `false` (default), `nodes`, `distance`, `duration`, `datasources`, `weight`, `speed`, `elevation`  |Returns additional metadata for each coordinate along the route geometry. `annotations=true` does not include `elevation`; request it explicitly.                 |
 |overview    |`simplified` (default), `full`, `false`, `by_legs`         |Add overview geometry either full, simplified according to highest zoom level it could be displayed on, not at all, or split by leg.|
 |timestamps  |`{timestamp};{timestamp}[;{timestamp} ...]`     |Timestamps for the input locations in seconds since UNIX epoch. Timestamps need to be monotonically increasing. |
 |radiuses    |`{radius};{radius}[;{radius} ...]`              |Standard deviation of GPS precision used for map matching. If applicable use GPS accuracy.|
@@ -487,7 +487,7 @@ In addition to the [general options](#general-options) the following options are
 |source      |`any` (default), `first`                        |Returned route starts at `any` or `first` coordinate                       |
 |destination |`any` (default), `last`                         |Returned route ends at `any` or `last` coordinate                          |
 |steps       |`true`, `false` (default)                       |Returned route instructions for each trip                                  |
-|annotations |`true`, `false` (default), `nodes`, `distance`, `duration`, `datasources`, `weight`, `speed` |Returns additional metadata for each coordinate along the route geometry.  |
+|annotations |`true`, `false` (default), `nodes`, `distance`, `duration`, `datasources`, `weight`, `speed`, `elevation` |Returns additional metadata for each coordinate along the route geometry. `annotations=true` does not include `elevation`; request it explicitly.  |
 |geometries  |`polyline` (default), `polyline6`, `geojson`    |Returned route geometry format (influences overview and per step)          |
 |overview    |`simplified` (default), `full`, `false`, `by_legs`         |Add overview geometry either full, simplified according to highest zoom level it could be displayed on, not at all, or split by leg.|
 
@@ -703,6 +703,7 @@ Annotation of the whole route leg with fine-grained information about each segme
 - `nodes`: Array of OpenStreetMap node ids for each coordinate along the route (excluding the first/last user-supplied coordinates). Each id is a 64-bit unsigned integer (encoded as a JSON number for the `json` format, and as `ulong` for the `flatbuffers` format). Clients consuming flatbuffers should treat these values as 64-bit integers (JS bindings expose them as BigInt).
 - `weight`: The weights between each pair of coordinates.  Does not include any turn costs.
 - `speed`: Convenience field, calculation of `distance / duration` rounded to one decimal place
+- `elevation`: Elevation for each coordinate along the route (one value per entry in `nodes`), in the units of the `--node-elevations` table given to `osrm-extract` (metres by convention). `null` where no elevation is known for the node (`NaN` in the `flatbuffers` format).
 - `metadata`: Metadata related to other annotations
   - `datasource_names`: The names of the data sources used for the speed between each pair of coordinates.  `lua profile` is the default profile, other values are the filenames supplied via `--segment-speed-file` to `osrm-contract` or `osrm-customize`
 
@@ -1094,7 +1095,7 @@ Almost the same as `json` StepManeuver object. The following properties differ:
 
 ### Annotation object
 
-Almost the same as the `json` annotation object. Note: on the flatbuffers wire the `Annotation.nodes` field is a `[ulong]` (64-bit unsigned integers), and the generated JavaScript flatbuffers bindings will expose these values as BigInt / BigUint64Array. Clients that consume flatbuffers should handle 64-bit node ids accordingly.
+Almost the same as the `json` annotation object. Note: on the flatbuffers wire the `Annotation.nodes` field is a `[ulong]` (64-bit unsigned integers), and the generated JavaScript flatbuffers bindings will expose these values as BigInt / BigUint64Array. Clients that consume flatbuffers should handle 64-bit node ids accordingly. The `elevation` field is a `[float]` with `NaN` where the `json` format would carry `null`.
 
 
 ### Position object

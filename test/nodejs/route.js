@@ -193,6 +193,25 @@ test('Test polyline6 geometries option', (assert) => {
   });
 });
 
+test('route: routes Monaco with elevation annotations options', (assert) => {
+  assert.plan(7);
+  const osrm = new OSRM(monaco_path);
+  const options = {
+    coordinates: two_test_coordinates,
+    overview: 'false',
+    annotations: ['elevation']
+  };
+  osrm.route(options, (err, response) => {
+    assert.ifError(err);
+    assert.ok(response.routes);
+    assert.ok(response.routes[0].legs.every(l => { return l.annotation; }), 'every leg has annotations');
+    assert.ok(response.routes[0].legs.every(l => { return Array.isArray(l.annotation.elevation) && l.annotation.elevation.length > 0; }), 'every leg has an elevation array');
+    assert.ok(response.routes[0].legs.every(l => { return l.annotation.elevation.every(e => e === null || typeof e === 'number'); }), 'elevation entries are numbers or null');
+    assert.notOk(response.routes[0].legs.every(l => { return l.annotation.duration; }), 'has no annotations for duration');
+    assert.notOk(response.routes[0].legs.every(l => { return l.annotation.nodes; }), 'has no annotations for nodes');
+  });
+});
+
 test('route: routes Monaco with speed annotations options', (assert) => {
   assert.plan(17);
   const osrm = new OSRM(monaco_path);

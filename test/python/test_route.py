@@ -118,6 +118,21 @@ class TestRoute:
 
         assert full_res["routes"][0]["geometry"] != simplified_res["routes"][0]["geometry"]
 
+    def test_route_elevationannotations(self):
+        route_params = osrm.RouteParameters(
+            coordinates=two_test_coordinates,
+            overview="false",
+            annotations=["elevation"],
+        )
+        res = self.osrm_py.Route(route_params)
+        assert res["routes"]
+        for l in res["routes"][0]["legs"]:
+            elevation = l["annotation"]["elevation"]
+            assert len(elevation) > 0
+            assert all(e is None or isinstance(e, float) for e in elevation)
+            assert "duration" not in l["annotation"]
+            assert "nodes" not in l["annotation"]
+
     def test_route_severalannotations(self):
         route_params = osrm.RouteParameters(
             coordinates=two_test_coordinates,
